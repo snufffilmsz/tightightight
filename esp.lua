@@ -35,7 +35,7 @@ end
 
 local ESP = {
     Enabled = true,
-    BoxType = "Dynamic",--nd static
+    BoxType = "Dynamic",-- and static
     BoxEnabled = true,
     BoxColor = Color3_fromRGB(255, 255, 255),
     BoxTransparency = 0,
@@ -53,7 +53,7 @@ local ESP = {
     NameEnabled = true,
     NameColor = Color3_fromRGB(255, 255, 255),
     NameTransparency = 0,
-    DisplayNames = true,
+    DisplayNames = false,
     DistanceEnabled = true,
     DistanceColor = Color3_fromRGB(255, 255, 255),
     DistanceTransparency = 0,
@@ -68,18 +68,16 @@ local ESP = {
     InventoryViewerKey = Enum.KeyCode.V,
     InventoryViewerMaxDistance = 1000,
     InventoryViewerColor = Color3_fromRGB(255, 255, 255),
-    MaxDistance = 10000,
+    MaxDistance = 3300,
     MeasurementType = "Roblox", -- roblox, imperial, and metric
-    HighlightVisible = false, -- obv
+    HighlightVisible = false,
     VisibleColor = Color3_fromRGB(255, 166, 2),
-    ChamsEnabled = false,
+    ChamsEnabled = true,
     ChamsVisibleColor = Color3_fromRGB(255, 0, 0),
-    ChamsOccludedColor = Color3_fromRGB(0, 0, 255), -- behind de wall
+    ChamsOccludedColor = Color3_fromRGB(0, 0, 255),
     ChamsOutlineColor = Color3_fromRGB(255, 255, 255),
     ChamsTransparency = 0.55,
     ChamsOutlineTransparency = 0.5,
-    --[[ChamsPulse = true,
-    ChamsPulseSpeed = 2--]]
 }
 
 local skeleton_order = { -- r15 oly
@@ -230,7 +228,11 @@ end
 local function draw(class, properties)
     local object = Drawing.new(class)
     for property, value in pairs(properties) do
-        object[property] = value
+        if property == "Font" and typeof(value) == "EnumItem" then
+            object[property] = value.Value
+        else
+            object[property] = value
+        end
     end
     return object
 end
@@ -265,8 +267,11 @@ local function create_highlight(character) -- lazy i know
 end
 
 local function update_highlight(highlight, is_visible)
-    highlight.Enabled = true
+    highlight.Enabled = ESP.ChamsEnabled and ESP.Enabled
     highlight.FillColor = is_visible and ESP.ChamsVisibleColor or ESP.ChamsOccludedColor
+    if ESP.HighlightVisible then
+        highlight.Enabled = highlight.Enabled and is_visible
+    end
     highlight.OutlineColor = ESP.ChamsOutlineColor
     highlight.OutlineTransparency = ESP.ChamsOutlineTransparency
 end
@@ -283,6 +288,10 @@ run_service.RenderStepped:Connect(function()
         end
         return
     end
+
+    local viewport_size = current_camera.ViewportSize
+    local viewport_center = viewport_size / 2
+
     for _, player in pairs(players:GetPlayers()) do
         if player == local_player then continue end
         if not player.Character or not player.Character:FindFirstChild("Humanoid") or not player.Character:FindFirstChild("HumanoidRootPart") then
@@ -293,15 +302,7 @@ run_service.RenderStepped:Connect(function()
             end
             continue
         end
-        local distance = 0
-        if game.PlaceId == 301549746 then -- counter blox
-            local root = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-            if root then
-                distance = (current_camera.CFrame.p - root.CFrame.p).Magnitude
-            end
-        else
-            distance = (player.Character.HumanoidRootPart.Position - local_player.Character.HumanoidRootPart.Position).Magnitude
-        end
+        local distance = (player.Character.HumanoidRootPart.Position - local_player.Character.HumanoidRootPart.Position).Magnitude
         if distance > ESP.MaxDistance then
             if esp_objects[player.Name] then
                 for _, object in pairs(esp_objects[player.Name]) do
@@ -351,7 +352,7 @@ run_service.RenderStepped:Connect(function()
                 objects.box_outside.Visible = true
                 objects.box.Position = Vector2_new(box.X, box.Y)
                 objects.box.Size = Vector2_new(box.W, box.H)
-                objects.box.Color = color
+                objects.box.Color = ESP.HighlightVisible and color or ESP.BoxColor
                 objects.box.Transparency = 1 - ESP.BoxTransparency
                 objects.box.Visible = true
                 objects.box_inside.Position = Vector2_new(box.X + 1, box.Y + 1)
@@ -375,13 +376,13 @@ run_service.RenderStepped:Connect(function()
                 local filled_height = bezier(0, box.H * health_percent, box.H * health_percent, box.H * health_percent, health_percent)
                 objects.health_bar.Position = Vector2_new(bar_position.X, bar_position.Y + box.H - filled_height)
                 objects.health_bar.Size = Vector2_new(2, filled_height)
-                objects.health_bar.Color = ESP.HealthBarColor:Lerp(Color3_fromRGB(255, 0, 0), 1 - health_percent)
+                objects.health_bar.Color = ESP.HighlightVisible and ESP.HealthBarColor:Lerp(Color3_fromRGB(255, 0, 0), 1 - health_percent) or ESP.HealthBarColor
                 objects.health_bar.Transparency = 1 - ESP.HealthBarTransparency
                 objects.health_bar.Visible = true
                 if ESP.HealthTextEnabled and health < 90 then
                     local text_offset = ESP.HealthBarPosition == "Left" and -7 - objects.health_text.TextBounds.X or 7
                     objects.health_text.Position = Vector2_new(bar_position.X + text_offset, bar_position.Y + (box.H * (1 - health_percent)) - (objects.health_text.TextBounds.Y / 2))
-                    objects.health_text.Color = ESP.HealthBarColor:Lerp(Color3_fromRGB(255, 0, 0), 1 - health_percent)
+                    objects.health_text.Color = ESP.HighlightVisible and ESP.HealthBarColor:Lerp(Color3_fromRGB(255, 0, 0), 1 - health_percent) or ESP.HealthBarColor
                     objects.health_text.Text = tostring(ceil(health))
                     objects.health_text.Visible = true
                 else
@@ -392,13 +393,15 @@ run_service.RenderStepped:Connect(function()
                     local boost_percent = boost / max_health
                     objects.health_bar_boost.Position = Vector2_new(bar_position.X, bar_position.Y)
                     objects.health_bar_boost.Size = Vector2_new(2, box.H * boost_percent)
-                    objects.health_bar_boost.Color = ESP.HealthBarBoostColor
+                    objects.health_bar_boost.Color = ESP.HighlightVisible and ESP.HealthBarBoostColor or ESP.HealthBarBoostColor
                     objects.health_bar_boost.Visible = boost > 0
                 end
             end
             if ESP.InventoryViewerEnabled and game.PlaceId == 863266079 and user_input_service:IsKeyDown(ESP.InventoryViewerKey) then
                 local mouse_pos = user_input_service:GetMouseLocation()
-                local closest_player, closest_dist = nil, huge
+                local closest_player, closest_dist = nil, math.huge
+            
+                -- Find the closest player
                 for _, p in pairs(players:GetPlayers()) do
                     if p ~= local_player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
                         local pos = current_camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
@@ -409,7 +412,9 @@ run_service.RenderStepped:Connect(function()
                         end
                     end
                 end
+            
                 if closest_player and closest_dist <= ESP.InventoryViewerMaxDistance then
+                    -- Gather player stats
                     local stats = closest_player:FindFirstChild("Stats")
                     local primary = stats and stats:FindFirstChild("Primary") and stats.Primary.Value or "None"
                     local secondary = stats and stats:FindFirstChild("Secondary") and stats.Secondary.Value or "None"
@@ -438,12 +443,40 @@ run_service.RenderStepped:Connect(function()
                         end
                     end
                     local ping = stats and stats:FindFirstChild("Ping") and stats.Ping.Value or "nil"
-                    objects.inventory_viewer.Text = string.format(
-                        "%s's information:\n\nWeapons:\nPrimary: %s | Ammo: %s\nSecondary: %s | Ammo: %s\n\nEquipment:\n%s\n\nInfo:\nHP: %d%%\nHP Boost: %s\nCharacter State: %s\nAccount Age: %d days\nPing: %s\nCheating: %s",
-                        closest_player.Name,
+            
+                    -- Create and display the UI
+                    local main_frame = Instance.new("Frame", core_gui)
+                    main_frame.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
+                    main_frame.BorderColor3 = Color3.fromRGB(0, 0, 0)
+                    main_frame.BorderSizePixel = 0
+                    main_frame.Position = UDim2.new(0.3, 0, 0.3, 0)
+                    main_frame.Size = UDim2.new(0.4, 0, 0.4, 0)
+                    main_frame.Visible = true -- Ensure visibility
+            
+                    local title = Instance.new("TextLabel", main_frame)
+                    title.BackgroundColor3 = Color3.fromRGB(13, 13, 13)
+                    title.BorderColor3 = Color3.fromRGB(0, 0, 0)
+                    title.BorderSizePixel = 0
+                    title.Position = UDim2.new(0.05, 0, 0.05, 0)
+                    title.Size = UDim2.new(0.9, 0, 0.1, 0)
+                    title.Font = Enum.Font.RobotoMono
+                    title.Text = closest_player.Name .. "'s Inventory"
+                    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    title.TextSize = 18
+                    title.Visible = true
+            
+                    local info = Instance.new("TextLabel", main_frame)
+                    info.BackgroundColor3 = Color3.fromRGB(13, 13, 13)
+                    info.BorderColor3 = Color3.fromRGB(0, 0, 0)
+                    info.BorderSizePixel = 0
+                    info.Position = UDim2.new(0.05, 0, 0.2, 0)
+                    info.Size = UDim2.new(0.9, 0, 0.7, 0)
+                    info.Font = Enum.Font.RobotoMono
+                    info.Text = string.format(
+                        "Primary: %s\nAmmo: %s\n\nSecondary: %s\nAmmo: %s\n\nEquipment:\n%s\n\nHP: %d%%\nHP Boost: %s\nCharacter State: %s\nAccount Age: %d days\nPing: %s\nCheating: %s",
                         primary,
                         primary_ammo,
-                        secondary, 
+                        secondary,
                         secondary_ammo,
                         table.concat(equipment, "\n"),
                         health,
@@ -453,17 +486,20 @@ run_service.RenderStepped:Connect(function()
                         ping,
                         is_cheating
                     )
-                    objects.inventory_viewer.Color = ESP.InventoryViewerColor
-                    objects.inventory_viewer.Visible = true
+                    info.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    info.TextSize = 14
+                    info.TextWrapped = true
+                    info.TextYAlignment = Enum.TextYAlignment.Top
+                    info.Visible = true
                 else
-                    objects.inventory_viewer.Visible = false
+                    print("No player found within range.")
                 end
             else
                 objects.inventory_viewer.Visible = false
-            end             
+            end        
             if ESP.NameEnabled then
                 objects.name.Position = Vector2_new(box.X + (box.W / 2), box.Y - 5 - objects.name.TextBounds.Y)
-                objects.name.Color = color
+                objects.name.Color = ESP.HighlightVisible and color or ESP.NameColor
                 objects.name.Transparency = 1 - ESP.NameTransparency
                 objects.name.Text = ESP.DisplayNames and player.DisplayName or player.Name
                 objects.name.Visible = true
@@ -479,7 +515,7 @@ run_service.RenderStepped:Connect(function()
                 local current = measurement[ESP.MeasurementType]
                 local display_distance = floor(distance / current.div)
                 objects.distance.Position = Vector2_new(box.X + (box.W / 2), box.Y + box.H + 3)
-                objects.distance.Color = color
+                objects.distance.Color = ESP.HighlightVisible and color or ESP.DistanceColor
                 objects.distance.Transparency = 1 - ESP.DistanceTransparency
                 objects.distance.Text = string.format("[%d%s]", display_distance, current.suffix)
                 objects.distance.Visible = true
@@ -525,23 +561,23 @@ run_service.RenderStepped:Connect(function()
                     end
                 end
             end
-            if ESP.ActiveItemEnabled then -- wtf
-                local active_item = ""
+            if ESP.ActiveItemEnabled then
+                local active_items = {}
                 if game.PlaceId == 863266079 then -- ar2
                     if player:FindFirstChild("Stats") then
                         local primary = player.Stats:FindFirstChild("Primary") and player.Stats.Primary.Value or ""
                         local secondary = player.Stats:FindFirstChild("Secondary") and player.Stats.Secondary.Value or ""
                         if primary ~= "" then
-                            active_item = "[" .. primary .. "]"
+                            table.insert(active_items, primary)
                         end
                         if secondary ~= "" then
-                            active_item = active_item .. (primary ~= "" and "\n[" or "[") .. secondary .. "]"
+                            table.insert(active_items, secondary)
                         end
                     end
                 elseif game.PlaceId == 286090429 then -- arsenal
                     local tool = player.Character and player.Character:FindFirstChild("Gun")
                     if tool then
-                        active_item = "[" .. tostring(tool:GetAttribute("Real")) .. "]"
+                        table.insert(active_items, tostring(tool:GetAttribute("Real")))
                     end
                 elseif game.PlaceId == 17625359962 then -- rivals
                     local view_models = workspace:FindFirstChild("ViewModels")
@@ -550,7 +586,7 @@ run_service.RenderStepped:Connect(function()
                             if model:IsA("Model") then
                                 local name_parts = string.split(model.Name, " - ")
                                 if #name_parts == 3 and name_parts[1] == player.Name then
-                                    active_item = "[" .. name_parts[2] .. "]"
+                                    table.insert(active_items, name_parts[2])
                                     break
                                 end
                             end
@@ -559,33 +595,46 @@ run_service.RenderStepped:Connect(function()
                 elseif game.PlaceId == 301549746 then -- counter blox
                     local tool = player.Character and player.Character:FindFirstChild("EquippedTool")
                     if tool and tool.Value then
-                        active_item = "[" .. tostring(tool.Value) .. "]"
+                        table.insert(active_items, tostring(tool.Value))
                     end
                 else -- universal
                     if player.Character then
                         local Tool = player.Character:FindFirstChildOfClass("Tool")
                         if Tool and Tool.Name then
-                            active_item = "[" .. Tool.Name .. "]"
+                            table.insert(active_items, Tool.Name)
                         end
                     end
                 end
-                if active_item ~= "" then
-                    objects.active_item.Position = Vector2_new(box.X + (box.W / 2), box.Y + box.H + 3)
-                    objects.active_item.Color = color
-                    objects.active_item.Transparency = 1 - ESP.ActiveItemTransparency
-                    objects.active_item.Text = active_item
-                    objects.active_item.Visible = true
+            
+                if #active_items > 0 then
+                    for i, item in ipairs(active_items) do
+                        objects["active_item_" .. i] = objects["active_item_" .. i] or draw("Text", { Center = true, Outline = true, Size = 13, Font = 2 })
+                        local active_item_object = objects["active_item_" .. i]
+                        active_item_object.Position = Vector2_new(box.X + (box.W / 2), box.Y + box.H + 3 + (i - 1) * (active_item_object.TextBounds.Y + 2))
+                        active_item_object.Color = ESP.HighlightVisible and color or ESP.ActiveItemColor
+                        active_item_object.Transparency = 1 - ESP.ActiveItemTransparency
+                        active_item_object.Text = "[" .. item .. "]"
+                        active_item_object.Visible = true
+                    end
                     if ESP.DistanceEnabled then
-                        objects.distance.Position = Vector2_new(box.X + (box.W / 2), box.Y + box.H + 3 + objects.active_item.TextBounds.Y)
+                        objects.distance.Position = Vector2_new(box.X + (box.W / 2), box.Y + box.H + 3 + #active_items * (objects.active_item.TextBounds.Y + 2))
                     end
                 else
-                    objects.active_item.Visible = false
+                    for i = 1, #active_items do
+                        if objects["active_item_" .. i] then
+                            objects["active_item_" .. i].Visible = false
+                        end
+                    end
                     if ESP.DistanceEnabled then
                         objects.distance.Position = Vector2_new(box.X + (box.W / 2), box.Y + box.H + 3)
                     end
                 end
             else
-                objects.active_item.Visible = false
+                for i = 1, #active_items do
+                    if objects["active_item_" .. i] then
+                        objects["active_item_" .. i].Visible = false
+                    end
+                end
                 if ESP.DistanceEnabled then
                     objects.distance.Position = Vector2_new(box.X + (box.W / 2), box.Y + box.H + 3)
                 end
@@ -605,7 +654,7 @@ run_service.RenderStepped:Connect(function()
                     objects.oof_arrow.PointA = end_pos_a
                     objects.oof_arrow.PointB = end_pos + (-difference.Unit * 15)
                     objects.oof_arrow.PointC = end_pos_c
-                    objects.oof_arrow.Color = ESP.OOFArrowsColor
+                    objects.oof_arrow.Color = ESP.HighlightVisible and ESP.OOFArrowsColor or ESP.OOFArrowsColor
                     objects.oof_arrow.Transparency = 1 - ESP.OOFArrowsTransparency
                     objects.oof_arrow.Visible = true
                     objects.oof_arrow_outline.PointA = end_pos_a
