@@ -78,8 +78,25 @@ local ESP = {
     ChamsOutlineColor = Color3_fromRGB(255, 255, 255),
     ChamsTransparency = 0.55,
     ChamsOutlineTransparency = 0.5,
+    CorpseESPEnabled = true,
+    CorpseColor = Color3_fromRGB(255, 0, 0),
+    CorpseTransparency = 0,
+    ShowSearchedCorpses = false,
+    MaxCorpseDistance = 1000,
+    VehicleESPEnabled = true,
+    VehicleColor = Color3_fromRGB(0, 255, 0),
+    VehicleTransparency = 0,
+    MaxVehicleDistance = 2000,
+    EventESPEnabled = true,
+    EventColor = Color3_fromRGB(255, 165, 0),
+    EventTransparency = 0,
+    LootESPEnabled = false, 
+    LootColor = Color3_fromRGB(255, 255, 255),
+    LootTransparency = 0,
+    ZombieESPEnabled = true, -- Added Zombie ESP configuration
+    ZombieColor = Color3_fromRGB(255, 0, 0),
+    ZombieTransparency = 0
 }
-
 local skeleton_order = { -- r15 oly
     ["LeftFoot"] = "LeftLowerLeg",
     ["LeftLowerLeg"] = "LeftUpperLeg",
@@ -177,6 +194,13 @@ local weapon_ammo = { -- ar2 only
     ["Walther P38"] = "9mm Parabellum",
 }
 
+local corpse_esp_objects = {}
+local vehicle_esp_objects = {}
+local event_esp_objects = {}
+local loot_esp_objects = {}
+local zombie_esp_objects = {}
+local loot_models = game:GetService("ReplicatedStorage").Assets.LootModels
+
 local function calculate_box(player)
     local character = player.Character
     if not character then return end
@@ -210,7 +234,7 @@ local function calculate_box(player)
         local width = max_x - min_x
         local height = max_y - min_y
         return { X = floor(min_x), Y = floor(min_y), W = floor(width), H = floor(height) }
-    else -- static
+    else -- staticadadadadadadadadadadadadadadaadadadadadadasdasdasdasdasdadasdasdasdasasdasasdasdasdasdasdasdasdasdasdasdadasdasdasdasdasdasasasasa
         local torso_cframe = character.HumanoidRootPart.CFrame
         local matrix_top = (torso_cframe.Position + Vector3_new(0, 0.3, 0)) + (torso_cframe.UpVector * 1.5) + current_camera.CFrame.UpVector
         local matrix_bottom = (torso_cframe.Position + Vector3_new(0, 0.4, 0)) - (torso_cframe.UpVector * 3)
@@ -255,6 +279,22 @@ local function is_visible(player)
     end
     return false
 end
+-- \
+local function calculate_corpse_distance(corpse)
+    if not local_player.Character or not local_player.Character:FindFirstChild("HumanoidRootPart") then return huge end
+    return (corpse:GetPivot().Position - local_player.Character.HumanoidRootPart.Position).Magnitude
+end
+
+local function calculate_object_distance(object)
+    if not local_player.Character or not local_player.Character:FindFirstChild("HumanoidRootPart") then return huge end
+    return (object:GetPivot().Position - local_player.Character.HumanoidRootPart.Position).Magnitude
+end
+
+local function calculate_zombie_distance(zombie)
+    if not local_player.Character or not local_player.Character:FindFirstChild("HumanoidRootPart") then return huge end
+    return (zombie:GetPivot().Position - local_player.Character.HumanoidRootPart.Position).Magnitude
+end
+
 
 local function create_highlight(character) -- lazy i know
     local highlight = Instance.new("Highlight")
@@ -329,10 +369,10 @@ run_service.RenderStepped:Connect(function()
                 inventory_viewer = draw("Text", { Center = false, Outline = true, Size = 20, Font = Enum.Font.SourceSans, Visible = false, Position = Vector2_new(10, 350), Color = Color3_new(0, 0, 0) })
             }
             for i = 1, 6 do
-                esp_objects[player.Name]["skeleton_head_" .. i] = draw("Line", { Color = ESP.SkeletonColor, Thickness = 1, Transparency = 1 - ESP.SkeletonTransparency, Visible = false })
+                esp_objects[player.Name]["skeleton_head_" .. i] = draw("Line", { Color = ESP.SkeletonColor, Thickness = 1.82, Transparency = 1 - ESP.SkeletonTransparency, Visible = false })
             end
             for required, _ in next, skeleton_order do
-                esp_objects[player.Name]["skeleton_".. required] = draw("Line", { Color = ESP.SkeletonColor, Transparency = 1 - ESP.SkeletonTransparency, Visible = false })
+                esp_objects[player.Name]["skeleton_".. required] = draw("Line", { Color = ESP.SkeletonColor, Thickness = 1.82, Transparency = 1 - ESP.SkeletonTransparency, Visible = false })
             end
         end
         if ESP.ChamsEnabled and not highlight_instances[player.Name] then
@@ -368,7 +408,7 @@ run_service.RenderStepped:Connect(function()
                 local health = game.PlaceId == 863266079 and floor(player.Stats.Health.Value) or player.Character.Humanoid.Health
                 local max_health = game.PlaceId == 863266079 and 100 or player.Character.Humanoid.MaxHealth
                 local health_percent = clamp(health / max_health, 0, 1)
-                local bar_position = Vector2_new(box.X - (ESP.HealthBarPosition == "Left" and ESP.HealthBarOffset or -box.W - ESP.HealthBarOffset), box.Y)
+                local bar_position = Vector2_new(box.X - (ESP.HealthBarPosition == "Left" and ESP.HealthBarOffset or box.W + ESP.HealthBarOffset), box.Y)
                 objects.health_bar_outside.Position = Vector2_new(bar_position.X - 1, bar_position.Y - 1)
                 objects.health_bar_outside.Size = Vector2_new(4, box.H + 2)
                 objects.health_bar_outside.Transparency = 0.5
@@ -396,12 +436,15 @@ run_service.RenderStepped:Connect(function()
                     objects.health_bar_boost.Color = ESP.HighlightVisible and ESP.HealthBarBoostColor or ESP.HealthBarBoostColor
                     objects.health_bar_boost.Visible = boost > 0
                 end
+            else
+                objects.health_bar_outside.Visible = false
+                objects.health_bar.Visible = false
+                objects.health_bar_boost.Visible = false
+                objects.health_text.Visible = false
             end
             if ESP.InventoryViewerEnabled and game.PlaceId == 863266079 and user_input_service:IsKeyDown(ESP.InventoryViewerKey) then
                 local mouse_pos = user_input_service:GetMouseLocation()
                 local closest_player, closest_dist = nil, math.huge
-            
-                -- Find the closest player
                 for _, p in pairs(players:GetPlayers()) do
                     if p ~= local_player and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
                         local pos = current_camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
@@ -414,7 +457,6 @@ run_service.RenderStepped:Connect(function()
                 end
             
                 if closest_player and closest_dist <= ESP.InventoryViewerMaxDistance then
-                    -- Gather player stats
                     local stats = closest_player:FindFirstChild("Stats")
                     local primary = stats and stats:FindFirstChild("Primary") and stats.Primary.Value or "None"
                     local secondary = stats and stats:FindFirstChild("Secondary") and stats.Secondary.Value or "None"
@@ -443,15 +485,14 @@ run_service.RenderStepped:Connect(function()
                         end
                     end
                     local ping = stats and stats:FindFirstChild("Ping") and stats.Ping.Value or "nil"
-            
-                    -- Create and display the UI
+
                     local main_frame = Instance.new("Frame", core_gui)
                     main_frame.BackgroundColor3 = Color3.fromRGB(12, 12, 12)
                     main_frame.BorderColor3 = Color3.fromRGB(0, 0, 0)
                     main_frame.BorderSizePixel = 0
                     main_frame.Position = UDim2.new(0.3, 0, 0.3, 0)
                     main_frame.Size = UDim2.new(0.4, 0, 0.4, 0)
-                    main_frame.Visible = true -- Ensure visibility
+                    main_frame.Visible = true
             
                     local title = Instance.new("TextLabel", main_frame)
                     title.BackgroundColor3 = Color3.fromRGB(13, 13, 13)
@@ -492,7 +533,7 @@ run_service.RenderStepped:Connect(function()
                     info.TextYAlignment = Enum.TextYAlignment.Top
                     info.Visible = true
                 else
-                    print("No player found within range.")
+                    print("Ntestestest")
                 end
             else
                 objects.inventory_viewer.Visible = false
@@ -606,14 +647,14 @@ run_service.RenderStepped:Connect(function()
                     end
                 end
             
-                if #active_items > 0 then
+                if #active_items > 0 and distance <= ESP.MaxDistance then
                     for i, item in ipairs(active_items) do
                         objects["active_item_" .. i] = objects["active_item_" .. i] or draw("Text", { Center = true, Outline = true, Size = 13, Font = 2 })
                         local active_item_object = objects["active_item_" .. i]
                         active_item_object.Position = Vector2_new(box.X + (box.W / 2), box.Y + box.H + 3 + (i - 1) * (active_item_object.TextBounds.Y + 2))
                         active_item_object.Color = ESP.HighlightVisible and color or ESP.ActiveItemColor
                         active_item_object.Transparency = 1 - ESP.ActiveItemTransparency
-                        active_item_object.Text = "[" .. item .. "]"
+                        active_item_object.Text = "" .. item .. ""
                         active_item_object.Visible = true
                     end
                     if ESP.DistanceEnabled then
@@ -673,6 +714,282 @@ run_service.RenderStepped:Connect(function()
                 end
             end
         end
+           if ESP.VehicleESPEnabled then
+        local vehicles_folder = workspace:FindFirstChild("Vehicles")
+        if vehicles_folder then
+            local spawned_folder = vehicles_folder:FindFirstChild("Spawned")
+            if spawned_folder then
+                for vehicle_name, object in pairs(vehicle_esp_objects) do
+                    if not spawned_folder:FindFirstChild(vehicle_name) then
+                        object.text:Remove()
+                        vehicle_esp_objects[vehicle_name] = nil
+                    end
+                end
+
+                for _, vehicle in ipairs(spawned_folder:GetChildren()) do
+                    if vehicle:IsA("Model") then
+                        local distance = calculate_object_distance(vehicle)
+                        if distance > ESP.MaxVehicleDistance then
+                            if vehicle_esp_objects[vehicle.Name] then
+                                vehicle_esp_objects[vehicle.Name].text.Visible = false
+                            end
+                            continue
+                        end
+
+                        if not vehicle_esp_objects[vehicle.Name] then
+                            vehicle_esp_objects[vehicle.Name] = {
+                                text = draw("Text", {
+                                    Center = true,
+                                    Outline = true,
+                                    Size = 13,
+                                    Font = 2,
+                                    Color = ESP.VehicleColor,
+                                    Transparency = 1 - ESP.VehicleTransparency
+                                })
+                            }
+                        end
+
+                        local pos = vehicle:GetPivot().Position
+                        local screen_pos, on_screen = current_camera:WorldToViewportPoint(pos)
+                        
+                        local text_obj = vehicle_esp_objects[vehicle.Name].text
+                        if on_screen then
+                            local measurement = {
+                                Roblox = {div = 1, suffix = "s"},
+                                Imperial = {div = 3.265, suffix = "y"},
+                                Metric = {div = 3.333, suffix = "m"}
+                            }
+                            local current = measurement[ESP.MeasurementType]
+                            local display_distance = floor(distance / current.div)
+                            
+                            text_obj.Position = Vector2_new(screen_pos.X, screen_pos.Y)
+                            text_obj.Text = string.format("[%s] [%d%s]", vehicle.Name, display_distance, current.suffix)
+                            text_obj.Visible = true
+                        else
+                            text_obj.Visible = false
+                        end
+                    end
+                end
+            end
+        end
+    else
+        for _, object in pairs(vehicle_esp_objects) do
+            object.text.Visible = false
+        end
+    end
+        if ESP.CorpseESPEnabled then
+        local corpses_folder = workspace:FindFirstChild("Corpses")
+        if corpses_folder then
+            for corpse_name, object in pairs(corpse_esp_objects) do
+                if not corpses_folder:FindFirstChild(corpse_name) then
+                    object.text:Remove()
+                    corpse_esp_objects[corpse_name] = nil
+                end
+            end
+
+            for _, corpse in ipairs(corpses_folder:GetChildren()) do
+                if corpse:IsA("Model") then
+                    local corpse_state = corpse:GetAttribute("CorpseState")
+
+                    if not ESP.ShowSearchedCorpses and corpse_state == "Searched" then
+                        if corpse_esp_objects[corpse.Name] then
+                            corpse_esp_objects[corpse.Name].text.Visible = false
+                        end
+                        continue
+                    end
+
+                    local distance = calculate_corpse_distance(corpse)
+                    if distance > ESP.MaxCorpseDistance then
+                        if corpse_esp_objects[corpse.Name] then
+                            corpse_esp_objects[corpse.Name].text.Visible = false
+                        end
+                        continue
+                    end
+
+                    if not corpse_esp_objects[corpse.Name] then
+                        corpse_esp_objects[corpse.Name] = {
+                            text = draw("Text", {
+                                Center = true,
+                                Outline = true,
+                                Size = 13,
+                                Font = 2,
+                                Color = ESP.CorpseColor,
+                                Transparency = 1 - ESP.CorpseTransparency
+                            })
+                        }
+                    end
+
+                    local pos = corpse:GetPivot().Position
+                    local screen_pos, on_screen = current_camera:WorldToViewportPoint(pos)
+                    
+                    local text_obj = corpse_esp_objects[corpse.Name].text
+                    if on_screen then
+                        local measurement = {
+                            Roblox = {div = 1, suffix = "s"},
+                            Imperial = {div = 3.265, suffix = "y"},
+                            Metric = {div = 3.333, suffix = "m"}
+                        }
+                        local current = measurement[ESP.MeasurementType]
+                        local display_distance = floor(distance / current.div)
+                        
+                        text_obj.Position = Vector2_new(screen_pos.X, screen_pos.Y)
+                        text_obj.Text = string.format("[%s] [%d%s]", corpse.Name, display_distance, current.suffix)
+                        text_obj.Visible = true
+                    else
+                        text_obj.Visible = false
+                    end
+                end
+            end
+        end
+    else
+        for _, object in pairs(corpse_esp_objects) do
+            object.text.Visible = false
+        end
+    end
+    if ESP.EventESPEnabled then
+        local events_folder = workspace.Map.Client.RandomEvents
+        if events_folder then
+            for event_name, object in pairs(event_esp_objects) do
+                if not events_folder:FindFirstChild(event_name) then
+                    object.text:Remove()
+                    event_esp_objects[event_name] = nil
+                end
+            end
+    
+            for _, event in ipairs(events_folder:GetChildren()) do
+                if event:IsA("Model") then
+                    if not event_esp_objects[event.Name] then
+                        event_esp_objects[event.Name] = {
+                            text = draw("Text", {
+                                Center = true,
+                                Outline = true,
+                                Size = 13,
+                                Font = 2,
+                                Color = ESP.EventColor,
+                                Transparency = 1 - ESP.EventTransparency
+                            })
+                        }
+                    end
+    
+                    local pos = event:GetPivot().Position
+                    local screen_pos, on_screen = current_camera:WorldToViewportPoint(pos)
+                    
+                    local text_obj = event_esp_objects[event.Name].text
+                    if on_screen then
+                        text_obj.Position = Vector2_new(screen_pos.X, screen_pos.Y)
+                        text_obj.Text = string.format("[%s]", event.Name)
+                        text_obj.Visible = true
+                    else
+                        text_obj.Visible = false
+                    end
+                end
+            end
+        end
+    end
+    if ESP.LootESPEnabled then
+        local loot_folder = workspace.Loot
+        if loot_folder then
+            for loot_name, object in pairs(loot_esp_objects) do
+                if not loot_folder:FindFirstChild(loot_name) then
+                    object.text:Remove()
+                    loot_esp_objects[loot_name] = nil
+                end
+            end
+    
+            for _, category in ipairs(loot_folder:GetChildren()) do
+                for _, loot_value in ipairs(category:GetChildren()) do
+                    if loot_value:IsA("CFrameValue") then
+                        local item_name = loot_value.Name
+                        
+                        if not loot_esp_objects[item_name] then
+                            loot_esp_objects[item_name] = {
+                                text = draw("Text", {
+                                    Center = true,
+                                    Outline = true,
+                                    Size = 13,
+                                    Font = 2,
+                                    Color = ESP.LootColor,
+                                    Transparency = 1 - ESP.LootTransparency
+                                })
+                            }
+                        end
+    
+                        local pos = loot_value.Value.Position
+                        local screen_pos, on_screen = current_camera:WorldToViewportPoint(pos)
+                        
+                        local text_obj = loot_esp_objects[item_name].text
+                        if on_screen then
+                            text_obj.Position = Vector2_new(screen_pos.X, screen_pos.Y)
+                            text_obj.Text = string.format("[%s]", item_name)
+                            text_obj.Visible = true
+                        else
+                            text_obj.Visible = false
+                        end
+                    end
+                end
+            end
+        end
+        if ESP.ZombieESPEnabled then
+            local zombies_folder = workspace:FindFirstChild("Zombies") and workspace.Zombies:FindFirstChild("Mobs")
+            if zombies_folder then
+                for zombie_name, object in pairs(zombie_esp_objects) do
+                    if not zombies_folder:FindFirstChild(zombie_name) then
+                        object.text:Remove()
+                        zombie_esp_objects[zombie_name] = nil
+                    end
+                end
+    
+                for _, zombie in ipairs(zombies_folder:GetChildren()) do
+                    if zombie:IsA("Model") then
+                        local distance = calculate_zombie_distance(zombie)
+                        if distance > ESP.MaxDistance then
+                            if zombie_esp_objects[zombie.Name] then
+                                zombie_esp_objects[zombie.Name].text.Visible = false
+                            end
+                            continue
+                        end
+    
+                        if not zombie_esp_objects[zombie.Name] then
+                            zombie_esp_objects[zombie.Name] = {
+                                text = draw("Text", {
+                                    Center = true,
+                                    Outline = true,
+                                    Size = 13,
+                                    Font = 2,
+                                    Color = ESP.ZombieColor,
+                                    Transparency = 1 - ESP.ZombieTransparency
+                                })
+                            }
+                        end
+    
+                        local pos = zombie:GetPivot().Position
+                        local screen_pos, on_screen = current_camera:WorldToViewportPoint(pos)
+                        
+                        local text_obj = zombie_esp_objects[zombie.Name].text
+                        if on_screen then
+                            local measurement = {
+                                Roblox = {div = 1, suffix = "s"},
+                                Imperial = {div = 3.265, suffix = "y"},
+                                Metric = {div = 3.333, suffix = "m"}
+                            }
+                            local current = measurement[ESP.MeasurementType]
+                            local display_distance = floor(distance / current.div)
+                            
+                            text_obj.Position = Vector2_new(screen_pos.X, screen_pos.Y)
+                            text_obj.Text = string.format("%s] [%d%s]", zombie.Name, display_distance, current.suffix)
+                            text_obj.Visible = true
+                        else
+                            text_obj.Visible = false
+                        end
+                    end
+                end
+            end
+        else
+            for _, object in pairs(zombie_esp_objects) do
+                object.text.Visible = false
+            end
+        end
+    end
         for player_name, objects in pairs(esp_objects) do
             if not players:FindFirstChild(player_name) then
                 for _, object in pairs(objects) do
